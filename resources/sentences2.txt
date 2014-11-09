@@ -1,0 +1,7 @@
+0 B C D E F
+1 A B C D E F
+2 Z C D E F
+3 A B C Z D E F
+4 A B C D E F
+5 C D E F
+6 C D E F

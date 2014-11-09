@@ -1,0 +1,11 @@
+1 A B C D E F
+2 B C D E F
+3 B C D E F G
+4 G B C D E F
+5 G B C D E F G
+6 B C D D E G
+7 A B C E F G
+8 A B C D E F
+9 B C D E F
+10 C D E F G
+11 A B C Z D E F

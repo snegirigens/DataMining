@@ -1,0 +1,24 @@
+Seconds to read / bucket: 95
+# buckets = 14412088
+total matches found = 1302014180
+total compares = 1310668408
+Seconds to run compares: 346
+
+For the first 100K lines, I got 238,004 as well.
+
+For the above test set I get 42 pairs, do we agree?
+0 [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 15, 19]
+1 [15, 19]
+2 [15, 19]
+3 [15, 19]
+4 [6, 8, 15, 19]
+5 [15, 19]
+6 [15, 19]
+7 [15, 19]
+8 [15, 19]
+9 [15, 19]
+10 [15, 19]
+11 [15, 19]
+12 [15, 19]
+15 [19]
+17 [18]
