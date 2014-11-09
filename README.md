@@ -1,0 +1,1 @@
+This is Coursera's course on Data Mining
