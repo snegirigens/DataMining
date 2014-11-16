@@ -1,3 +1,8 @@
+find src -name '*.java' | xargs javac -d dest -sourcepath src
+jar -cvf sneg.jar -C dest .
+java -classpath sneg.jar com.sneg.SimilarSentences
+
+
 Seconds to read / bucket: 95
 # buckets = 14412088
 total matches found = 1302014180

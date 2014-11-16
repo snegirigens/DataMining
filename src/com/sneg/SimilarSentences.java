@@ -17,7 +17,7 @@ import java.util.Set;
 import java.util.TreeSet;
 
 public class SimilarSentences {
-	private static final String FILE = "C:/Workspace/Test/resources/sentences.txt";
+	private static final String FILE = "resources/sentences.txt";
 	private static final int MEDIAN = 5;
 	private static final int LIMIT = 1000000000;
 
