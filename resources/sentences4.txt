@@ -1,0 +1,7 @@
+0 A B C D
+1 A B C E
+2 A B C Z D
+3 A B C D Z
+4 B C D
+5 Z B C D
+6 Z A B C D

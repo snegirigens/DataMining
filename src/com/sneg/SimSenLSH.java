@@ -5,28 +5,33 @@
 
 package com.sneg;
 
-import com.sun.deploy.util.StringUtils;
-
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.FileReader;
-import java.io.FileWriter;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
+/**
+ * This implementation finds 429493281 similar pairs of sentences (actual number is 429493953)
+ * It runs for 9.5 minutes and consumes about 3GB heap space
+ */
 public class SimSenLSH {
-	private static final String FILE = "resources/sentences1.txt";
-	private static final double J = 0.8;
-//	private static final int MEDIAN = 5;
+	private static final String FILE = "resources/sentences.txt";
+	private static final int SPLIT = 4;
 	private static final int LIMIT = 1000000000;
 
 	public static void main (String[] args) throws Exception {
 		SimSenLSH test = new SimSenLSH();
 
-		test.readFile(FILE);
+		test.readFile (FILE);
 	}
 
 	private Map <String, Integer> _dictionary = new HashMap<>();	// Key: word. Value: id
-	private Map <Tuple, Map <Integer, int[]>> _index = new HashMap<>();		// Key: Tuple (wordId, position, suffix). Value: Map <sentencesID, words IDs>
+	private Map <Integer, Map <Integer, int[]>> _lowIndex  = new HashMap<>();	// Key: hash of sentence's first 5 words. Value: Map <sentencesID, words IDs>
+	private Map <Integer, Map <Integer, int[]>> _highIndex = new HashMap<>();	// Key: hash of sentence's last 5 words. Value: Map <sentencesID, words IDs>
+
+	private long _count = 0;
 
 	private void readFile (String file) throws Exception {
 		FileReader fr = new FileReader (file);
@@ -36,15 +41,16 @@ public class SimSenLSH {
 
 		int count = 0;
 		for (String line; (line = reader.readLine()) != null;) {
-//			if (count++ % 10000 == 0) System.out.println (line);
-			visitLine(line);
+			if (count++ % 10000 == 0) System.out.println (line);
+			visitLine (line);
 
 			if (count >= LIMIT) break;
 		}
 
-		System.out.println ("Done");
-		printDictionary();
-		printIndex();
+		System.out.println ("Done " + count + " lines: " + _count + " similar pairs");
+//		printDictionary();
+//		printIndex (_lowIndex);
+//		printIndex (_highIndex);
 
 		reader.close();
 		fr.close();
@@ -54,38 +60,62 @@ public class SimSenLSH {
 		String[] words = line.split ("\\s");
 		int sentenceID = Integer.parseInt (words[0]);
 
-
-		int[] sentence = new int [words.length - 1];		// Sentence encoded as a list of word Ids
+		int[] sentence  = new int [words.length - 1];		// Sentence encoded as a list of word Ids
+		int[] lowWords  = new int [SPLIT];
+		int[] highWords = new int [SPLIT];
 
 		for (int i = 1; i < words.length; i++) {
 			int wordId = getWordId (words[i]);
 			sentence[i - 1] = wordId;
-		}
 
-		int prefixLength = getPrefixLength (words.length - 1);
-		System.out.println (line + " (" + prefixLength + ")");
-
-		for (int i = 0; i < prefixLength; i++) {
-			int pos = i + 1;
-			int k = sentence.length - pos;
-			Tuple tuple = new Tuple (sentence[i], pos, k);
-
-			Map <Integer, int[]> sentences = _index.get (tuple);
-
-			if (sentences == null) {
-				sentences = new HashMap<>();
-				_index.put (tuple, sentences);
+			if (i <= SPLIT) {
+				lowWords[i - 1] = wordId;
 			}
 
-			for (Integer id : sentences.keySet()) {
-				int[] candidate = sentences.get (id);
-				if (isDistance (sentence, candidate, 1)) {
-					System.out.println (id + " ==> " + sentenceID);
-				}
+			if (i >= words.length - SPLIT) {
+				highWords[i - (words.length - SPLIT)] = wordId;
 			}
-
-			sentences.put (sentenceID, sentence);
 		}
+
+		int lowHash  = hashWords (lowWords);
+		int highHash = hashWords (highWords);
+
+		Set <Integer> matches = new HashSet<>();	// We should not count identical sentences twice
+		matches.addAll (testAndStore (_lowIndex,  lowHash,  sentence, sentenceID));
+		matches.addAll (testAndStore (_highIndex, highHash, sentence, sentenceID));
+
+		_count += matches.size();
+	}
+
+	private Set <Integer> testAndStore (Map <Integer, Map <Integer, int[]>> indexMap, int hash, int[] sentence, int sentenceID) {
+		Map <Integer, int[]> candidates = indexMap.get (hash);
+		Set <Integer> matches = new HashSet<>();
+
+		if (candidates == null) {
+			candidates = new HashMap<>();
+			indexMap.put (hash, candidates);
+		}
+
+		for (Integer id : candidates.keySet()) {
+			int[] candidate = candidates.get (id);
+			if (isDistance (sentence, candidate, 1)) {
+				matches.add (id);
+			}
+		}
+
+		candidates.put (sentenceID, sentence);
+		return matches;
+	}
+
+	private int hashWords (int[] words) {
+//		printArray (words);
+		int hash = 0;
+
+		for (int i = 0; i < words.length; i++) {
+			hash += 31 * words[i];
+		}
+
+		return hash;
 	}
 
 	private int getWordId (String word) {
@@ -99,11 +129,6 @@ public class SimSenLSH {
 		return id;
 	}
 
-	private int getPrefixLength (int L) {
-		return (int) Math.floor ((1 - J) * L + 1);
-	}
-
-
 	private boolean isDistance (int[] words1, int[] words2, int distance) {
 		if (words1.length - words2.length > distance || words2.length - words1.length > distance) {
 			return false;
@@ -111,19 +136,32 @@ public class SimSenLSH {
 
 		int[] a = words1.length >= words2.length ? words1 : words2;
 		int[] b = a == words1 ? words2 : words1;
+		int i = 0, j = 0;
 
-		for (int i = 0, j = 0; i < a.length; i++) {
-			if (a[i] != (b[j])) {
-				if (distance-- <= 0) {
-					return false;
-				}
+OUTER:	for (; i < a.length && j < b.length; i++, j++) {
+			if (a[i] == b[j]) {
+				continue;
 			}
-			else {
-				j++;
+
+			if (i >= a.length - distance) {
+				break;
 			}
+
+			for (int k = 1; k <= distance && i+k < a.length; k++) {
+				for (int m = 0; m <= distance && j+m < b.length; m++) {
+                    if (a[i+k] == b[j+m]) {
+                        distance -= k;
+						i += k;
+						j += m;
+                        continue OUTER;
+                    }
+                }
+			}
+
+			return false;
 		}
 
-		return true;
+		return a.length - i <= distance && b.length - j <= distance;
 	}
 
 	private void printDictionary() {
@@ -132,9 +170,9 @@ public class SimSenLSH {
 		}
 	}
 
-	private void printIndex() {
-		for (Tuple tuple : _index.keySet()) {
-			Map <Integer, int[]> sentence = _index.get(tuple);
+	private void printIndex (Map <Integer, Map <Integer, int[]>> indexMap) {
+		for (Integer hash : indexMap.keySet()) {
+			Map <Integer, int[]> sentence = indexMap.get (hash);
 
 			for (Integer id : sentence.keySet()) {
 				int[] array= sentence.get(id);
@@ -144,44 +182,18 @@ public class SimSenLSH {
 					sb.append (i);
 
 				}
-				System.out.println (tuple + " = " + id + " {" + sb + "}");
+				System.out.println (hash + " = " + id + " {" + sb + "}");
 			}
 		}
 	}
 
-	private static class Tuple implements Comparable <Tuple> {
-		private final int _a;
-		private final int _b;
-		private final int _c;
-
-		private Tuple (int a, int b, int c) {
-			_a = a;
-			_b = b;
-			_c = c;
+	private void printArray (int[] array) {
+		StringBuilder sb = new StringBuilder().append('[');
+		for (int i = 0; i < array.length; i++) {
+			if (i > 0) sb.append (',');
+			sb.append (array[i]);
 		}
-
-		@Override
-		public boolean equals (Object o) {
-			if (this == o) return true;
-			if (o == null || getClass() != o.getClass()) return false;
-
-			Tuple that = (Tuple) o;
-			return _a == that._a && _b == that._b && _c == that._c;
-		}
-
-		@Override
-		public int hashCode() {
-			return 31 * _a + 17 * _b + _c;
-		}
-
-		@Override
-		public int compareTo (Tuple that) {
-			return _a < that._a ? -1 : _a > that._a ? 1 : _b < that._b ? -1 : _b > that._b ? 1 : _c < that._c ? -1 : _c > that._c ? 1 : 0;
-		}
-
-		@Override
-		public String toString() {
-			return "(" + _a + ", " + _b + ", " + _c + ")";
-		}
+		sb.append (']');
+		System.out.println (sb);
 	}
 }
